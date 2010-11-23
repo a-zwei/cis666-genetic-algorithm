@@ -1,0 +1,27 @@
+graph {
+1 [style=filled fillcolor="cornflowerblue"]
+2 [style=filled fillcolor="darkgreen"]
+3 [style=filled fillcolor="crimson"]
+4 [style=filled fillcolor="cornflowerblue"]
+5 [style=filled fillcolor="cornflowerblue"]
+6 [style=filled fillcolor="crimson"]
+7 [style=filled fillcolor="crimson"]
+8 [style=filled fillcolor="crimson"]
+9 [style=filled fillcolor="cornflowerblue"]
+10 [style=filled fillcolor="crimson"]
+11 [style=filled fillcolor="crimson"]
+12 [style=filled fillcolor="darkgreen"]
+  1 -- 11
+  2 -- 1
+  4 -- 8
+  5 -- 12
+  6 -- 5
+  8 -- 2
+  9 -- 6
+  10 -- 9
+  11 -- 9
+  12 -- 4
+  12 -- 9
+  12 -- 7
+  12 -- 6
+}
