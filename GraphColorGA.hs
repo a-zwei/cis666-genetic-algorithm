@@ -1,6 +1,6 @@
-module GraphColorGA (Color, {-colorGraph,-} nodeColor) where
+module GraphColorGA (Color, colorGraph, nodeColor, Solution) where
 
-import Control.Monad (replicateM)
+import Control.Monad (liftM, when, replicateM)
 import Data.Function (on)
 import Data.Ix (inRange)
 import Data.List (findIndex, nub, sortBy)
@@ -56,8 +56,9 @@ probs g p = [fitness g s / totalFitness | s <- p]
 
 probRanges :: UGraph -> Population -> [(Int, Int)]
 probRanges g p = zip ms (map (subtract 1) $ tail ms)
-  where ms = scanl f 0 $ probs g p
-        f t p = floor (10000 * p) + t
+  where ms = fixlast $ scanl f 0 $ probs g p
+        f t p = round (10000 * p) + t
+        fixlast xs = reverse . (10000:) $ (tail . reverse) xs
 
 select :: UGraph -> Population -> IO Solution
 select g p = do
@@ -72,17 +73,22 @@ pairOff :: Population -> [Pair]
 pairOff [] = []
 pairOff (s1:s2:ss) = (s1, s2) : pairOff ss
 
+mutation = 10000 :: Int
+
 nextGeneration :: UGraph -> Population -> IO Population
 nextGeneration g p = do
   mp <- matingPool g p
-  ngps <- mapM crossIO $ pairOff mp
-  return $ flatten ngps
+  ngps <- liftM flatten $ mapM crossIO $ pairOff mp
+  r <- randomRIO (1, mutation)
+  rix <- randomRIO (0, length p - 1)
+  ms <- mutateIO (ngps !! rix)
+  return $ if r == 1 then update rix ms ngps else ngps
 
 randomSolution :: Int -> Int -> IO Solution
-randomSolution n max = replicateM n $ randomRIO (1, max)
+randomSolution len max = replicateM len $ randomRIO (1, max)
 
 randomPopulation :: Int -> Int -> Int -> IO Population
-randomPopulation n sl max = replicateM n $ randomSolution sl max
+randomPopulation n slen max = replicateM n $ randomSolution slen max
 
 neighborColors :: UGraph -> Solution -> Node -> [Color]
 neighborColors g s node = [nodeColor s n | n <- neighbors g node]
@@ -90,21 +96,29 @@ neighborColors g s node = [nodeColor s n | n <- neighbors g node]
 best :: UGraph -> Population -> Solution
 best g p = last $ sortBy (compare `on` (fitness g)) p
 
-repeatGA :: UGraph -> Int -> Int -> Population -> IO Population
-repeatGA g times regressChances p = do
-  newPopulation <- iterateM times (nextGeneration g) p
+repeatGA :: UGraph -> Int -> Int -> Int -> Solution -> Population
+  -> IO Population
+repeatGA g betweenLog iters regressChances bestBest p = do
+  newPop <- nextGeneration g p
   let oldBest = best g p
-  let newBest = best g newPopulation
-  putStr $ "Best after " ++ show times ++ " iterations: " ++ show newBest
-  putStrLn $ " (fitness " ++ show (fitness g newBest) ++ ")"
-  if fitness g newBest > fitness g oldBest
-    then repeatGA g times regressChances newPopulation
+      newBest = best g newPop
+      oldBestF = fitness g oldBest
+      newBestF = fitness g newBest
+      bestBestF = fitness g bestBest
+  when (iters == 0) $
+    putStrLn $ "Best " ++ show newBest ++ " (fitness " ++ show newBestF ++ ")"
+  let ni = (iters + 1) `mod` betweenLog
+  if newBestF > oldBestF
+    then if newBestF > bestBestF
+            then repeatGA g betweenLog ni regressChances newBest newPop
+            else repeatGA g betweenLog ni (regressChances + 1) bestBest newPop
     else if regressChances > 0
-            then repeatGA g times (regressChances - 1) newPopulation
-            else return p
+            then repeatGA g betweenLog ni (regressChances - 1) bestBest newPop
+            else return [bestBest]
 
 colorGraph :: UGraph -> Int -> Int -> Int -> IO Solution
 colorGraph g popSize iters regressChances = do
   initialPopulation <- randomPopulation popSize (noNodes g) (noNodes g)
-  newPopulation <- repeatGA g iters regressChances initialPopulation
-  return $ best g newPopulation
+  let initialBest = best g initialPopulation
+  newPop <- repeatGA g iters 0 regressChances initialBest initialPopulation
+  return $ best g newPop
